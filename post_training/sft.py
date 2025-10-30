@@ -20,6 +20,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config-path", type=str, required=True, help="Path to the config file"
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Load config/dataset and exit before training.",
+    )
     arguments = parser.parse_args()
 
     # Parsing the path to the config file
@@ -87,15 +92,35 @@ if __name__ == "__main__":
     tokenizer.padding_side = "right"
 
     # Load and preprocess the dataset
-    data = load_dataset(
-        config["dataset"]["name"],
-        config["dataset"].get("subset"),
-        split=config["dataset"]["split"],
-        num_proc=config["dataset"].get("num_proc")
-        if config["dataset"].get("num_proc") or config["dataset"].get("streaming")
-        else multiprocessing.cpu_count(),
-        streaming=config["dataset"].get("streaming"),
-    )
+    dataset_cfg = config["dataset"]
+    dataset_type = dataset_cfg.get("type", "huggingface").lower()
+    if dataset_type == "local":
+        data_format = dataset_cfg.get("format", "jsonl").lower()
+        path = dataset_cfg["path"]
+        if data_format == "jsonl":
+            data = load_dataset(
+                "json",
+                data_files=path,
+                split=dataset_cfg.get("split", "train"),
+            )
+        elif data_format == "json":
+            data = load_dataset(
+                "json",
+                data_files=path,
+                split=dataset_cfg.get("split", "train"),
+            )
+        else:
+            raise ValueError(f"Unsupported local dataset format: {data_format}")
+    else:
+        data = load_dataset(
+            dataset_cfg["name"],
+            dataset_cfg.get("subset"),
+            split=dataset_cfg["split"],
+            num_proc=dataset_cfg.get("num_proc")
+            if dataset_cfg.get("num_proc") or dataset_cfg.get("streaming")
+            else multiprocessing.cpu_count(),
+            streaming=dataset_cfg.get("streaming"),
+        )
 
     # --- Print one example to verify template/EOS works ---
     sample = next(iter(data))
@@ -112,12 +137,15 @@ if __name__ == "__main__":
 
     # Define Training Arguments and Trainer
     training_arguments = SFTConfig(**config["trainer"])
-    trainer = SFTTrainer(
-        model=model,
-        processing_class=tokenizer,
-        train_dataset=data,
-        args=training_arguments,
-    )
+    if arguments.dry_run:
+        logger.info("Dry run requested; skipping training loop.")
+    else:
+        trainer = SFTTrainer(
+            model=model,
+            processing_class=tokenizer,
+            train_dataset=data,
+            args=training_arguments,
+        )
 
-    trainer.train()
-    logger.info("Training Done! 💥")
+        trainer.train()
+        logger.info("Training Done! 💥")

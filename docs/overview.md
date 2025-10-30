@@ -15,6 +15,8 @@
 
 ## System Architecture
 
+> **Phase 1 note:** Sample datasets shipped with the repository contain 10 demonstration records per stage. The diagrams below describe the full-scale pipeline envisioned for Phase 2 (50k–80k examples per stage).
+
 ### High-Level Architecture
 
 ```

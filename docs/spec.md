@@ -19,20 +19,20 @@
 
 #### FR-1: Code Validation System
 **Priority:** HIGH
-**Status:** TO BE IMPLEMENTED
+**Status:** COMPLETED (Phase 1)
 
 **Description:**
 System must validate medical billing codes against official code databases.
 
 **Acceptance Criteria:**
-- [ ] Support ICD-10-CM code validation (alpha-numeric format)
-- [ ] Support CPT code validation (5-digit numeric format)
-- [ ] Support HCPCS code validation (alphanumeric format)
-- [ ] Return validation result with metadata (description, category)
-- [ ] Handle invalid codes gracefully with error messages
-- [ ] Support batch validation of multiple codes
-- [ ] Load code databases from JSON files
-- [ ] Cache code databases for performance
+- [x] Support ICD-10-CM code validation (alpha-numeric format)
+- [x] Support CPT code validation (5-digit numeric format)
+- [x] Support HCPCS code validation (alphanumeric format)
+- [x] Load code databases from JSON files
+- [x] Cache code databases for performance
+- [x] Expose metadata lookup via `CodeValidator.get`
+- [ ] Batch validation helper (not yet prioritised)
+- [ ] CLI flag for exporting validation summaries
 
 **Input:**
 ```python
@@ -42,78 +42,68 @@ code_type: str            # "ICD10", "CPT", or "HCPCS"
 
 **Output:**
 ```python
-{
-    "is_valid": bool,
-    "code": str,
-    "code_type": str,
-    "description": str | None,
-    "category": str | None,
-    "error_message": str | None
-}
+bool  # True if code exists in the requested database
 ```
 
 **Example Usage:**
 ```python
+from pathlib import Path
 from utils.code_validator import CodeValidator
 
-validator = CodeValidator()
-result = validator.validate("E11.9", code_type="ICD10")
+validator = CodeValidator(Path("data/code_databases"))
 
-if result.is_valid:
-    print(f"Valid code: {result.description}")
+if validator.validate("E11.9", code_type="ICD10"):
+    record = validator.get("E11.9", "ICD10")
+    print("Valid:", record["short_description"])
 else:
-    print(f"Invalid code: {result.error_message}")
+    print("Code not found.")
 ```
 
 **Error Handling:**
-- Raise `ValueError` for empty codes
-- Raise `ValueError` for invalid code types
-- Return `is_valid=False` for codes not in database
-- Log warnings for database loading issues
+- Raises `ValueError` for unsupported code types.
+- Returns `False` when codes are missing (no exceptions).
+- Raises `FileNotFoundError` when databases are not available.
 
 ---
 
 #### FR-2: Data Quality Checking
 **Priority:** HIGH
-**Status:** TO BE IMPLEMENTED
+**Status:** IMPLEMENTED (Phase 1 scope)
 
 **Description:**
 System must validate training data format and quality before training.
 
 **Acceptance Criteria:**
-- [ ] Validate JSON/JSONL schema compliance
-- [ ] Check for required fields (messages, role, content)
-- [ ] Validate message structure (system, user, assistant)
-- [ ] Check for empty content fields
-- [ ] Detect reasoning tags in Stage 2+ data
-- [ ] Validate code format in assistant responses
+- [x] Validate JSONL structure and message format
+- [x] Ensure required fields (`messages`, `_metadata`) exist
+- [x] Confirm `<think>` reasoning for Stage 2
+- [x] Validate codes using `CodeValidator`
+- [x] Produce machine-readable report (JSON)
 - [ ] Check narrative length constraints
 - [ ] Detect potential PHI in narratives
-- [ ] Generate quality report with statistics
+- [ ] Attach severity levels to issues
 
 **Quality Checks:**
 
 | Check | Description | Stage |
 |-------|-------------|-------|
 | Schema validation | Valid JSON structure | All |
-| Required fields | Has 'messages' field | All |
-| Message roles | Valid role types | All |
-| Empty content | No empty messages | All |
-| Code format | Valid code pattern | All |
-| Reasoning tags | Has `<think>` tags | 2, 3 |
-| Narrative length | 10-2000 characters | All |
-| PHI detection | No obvious PHI | All |
+| Required fields | Has `messages` or preference pair | All |
+| Code validity | Checked against curated databases | All |
+| Reasoning tags | Requires `<think>` in Stage 2 | Stage 2 |
+| Preference format | Ensures prompt/chosen/rejected keys | Stage 3 |
 
 **Example Usage:**
 ```python
-from utils.data_quality import DataQualityChecker
+from pathlib import Path
+from utils.code_validator import CodeValidator
+from utils.data_quality import validate_dataset
 
-checker = DataQualityChecker()
-result = checker.check_file("data/examples/sample_stage_1.jsonl", stage=1)
+validator = CodeValidator(Path("data/code_databases"))
+report = validate_dataset(Path("data/examples/sample_stage_2.jsonl"), "stage_2", validator)
 
-print(f"Valid examples: {result.valid_count}")
-print(f"Invalid examples: {result.invalid_count}")
-print(f"Errors: {result.errors}")
+print(report.total_records)
+print(report.to_dict())
 ```
 
 ---

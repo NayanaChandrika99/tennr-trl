@@ -1,6 +1,7 @@
 """Data preparation script to create a dataset for training using streaming."""
 
 import argparse
+import json
 import os
 import shutil
 import tempfile
@@ -8,6 +9,7 @@ import threading
 import time
 from datetime import datetime
 from itertools import islice
+from pathlib import Path
 from typing import Any, Dict, Iterator, Optional
 
 import psutil
@@ -15,6 +17,25 @@ import yaml
 from datasets import Dataset, load_dataset
 from huggingface_hub import HfApi
 from loguru import logger
+
+
+def make_counts_key(dataset_config: Dict[str, Any]) -> str:
+    """Create a stable key for tracking actual counts per dataset entry."""
+
+    dataset_id = dataset_config.get("id") or dataset_config.get("name") or "anonymous"
+    dataset_type = dataset_config.get("type", "huggingface").lower()
+    subset = dataset_config.get("subset")
+    split = dataset_config.get("split", "train")
+    path = dataset_config.get("path") if dataset_type == "local" else None
+
+    parts = [dataset_id]
+    if path:
+        parts.append(str(path))
+    if subset:
+        parts.append(str(subset))
+    if split:
+        parts.append(str(split))
+    return "::".join(parts)
 
 
 def clean_example(
@@ -106,18 +127,21 @@ def generate_dataset_metadata(
 
     dataset_sources = []
     for dataset_config in config["datasets"]:
-        dataset_name = dataset_config["name"]
-        subset = dataset_config.get("subset")
-        split = dataset_config["split"]
-        requested_entries = dataset_config["entries"]
-        actual_entries = actual_counts.get(f"{dataset_name}_{subset}_{split}", 0)
+        dataset_id = dataset_config.get("id") or dataset_config.get("name")
+        dataset_type = dataset_config.get("type", "huggingface")
+        split = dataset_config.get("split", "train")
+        requested_entries = dataset_config.get("entries")
+        key = make_counts_key(dataset_config)
+        actual_entries = actual_counts.get(key, 0)
+        source_path = dataset_config.get("path") if dataset_type == "local" else dataset_config.get("name")
 
         source_info = {
-            "name": dataset_name,
-            "subset": subset,
+            "id": dataset_id,
+            "type": dataset_type,
             "split": split,
             "requested_entries": requested_entries,
             "actual_entries": actual_entries,
+            "source": source_path,
             "percentage_of_total": round((actual_entries / total_entries) * 100, 2)
             if total_entries > 0
             else 0,
@@ -152,27 +176,49 @@ def create_streaming_dataset_generator(config: Dict[str, Any]) -> Iterator[Dict]
     logger.info("Starting to process datasets in streaming mode...")
 
     for i, dataset_config in enumerate(config["datasets"]):
-        dataset_name = dataset_config["name"]
+        dataset_id = dataset_config.get("id") or dataset_config.get("name")
+        dataset_type = dataset_config.get("type", "huggingface").lower()
         subset = dataset_config.get("subset")
-        split = dataset_config["split"]
-        entries = dataset_config["entries"]
+        split = dataset_config.get("split", "train")
+        entries = dataset_config.get("entries")
         columns_to_drop = dataset_config.get("drop_columns")
         rename_map = dataset_config.get("rename_columns")
 
         logger.info(
-            f"Processing dataset {i + 1}/{len(config['datasets'])}: {dataset_name}"
+            f"Processing dataset {i + 1}/{len(config['datasets'])}: {dataset_id}"
         )
-        logger.info(f"  Subset: {subset}, Split: {split}, Entries: {entries}")
+        logger.info(f"  Type: {dataset_type}, Split: {split}, Entries: {entries}")
 
         try:
-            if subset:
-                streaming_dataset = load_dataset(
-                    dataset_name, subset, split=split, streaming=True
-                )
+            if dataset_type == "local":
+                path = Path(dataset_config["path"])
+                data_format = dataset_config.get("format", "jsonl").lower()
+                if data_format == "jsonl":
+                    def stream_jsonl() -> Iterator[Dict[str, Any]]:
+                        with path.open("r", encoding="utf-8") as handle:
+                            for line in handle:
+                                line = line.strip()
+                                if line:
+                                    yield json.loads(line)
+
+                    streaming_dataset = stream_jsonl()
+                elif data_format == "json":
+                    dataset = json.loads(path.read_text(encoding="utf-8"))
+                    if isinstance(dataset, list):
+                        streaming_dataset = iter(dataset)
+                    else:
+                        raise ValueError("JSON local dataset must be a list of records.")
+                else:
+                    raise ValueError(f"Unsupported local format: {data_format}")
             else:
-                streaming_dataset = load_dataset(
-                    dataset_name, split=split, streaming=True
-                )
+                if subset:
+                    streaming_dataset = load_dataset(
+                        dataset_config["name"], subset, split=split, streaming=True
+                    )
+                else:
+                    streaming_dataset = load_dataset(
+                        dataset_config["name"], split=split, streaming=True
+                    )
 
             if entries:
                 dataset_iter = islice(streaming_dataset, entries)
@@ -193,10 +239,10 @@ def create_streaming_dataset_generator(config: Dict[str, Any]) -> Iterator[Dict]
                 if total_entries % 10000 == 0:
                     logger.info(f"  Processed {total_entries} total entries so far...")
 
-            logger.info(f"  Completed: {dataset_entries} entries from {dataset_name}")
+            logger.info(f"  Completed: {dataset_entries} entries from {dataset_id}")
 
         except Exception as e:
-            logger.error(f"Failed to process dataset {dataset_name}: {str(e)}")
+            logger.error(f"Failed to process dataset {dataset_id}: {str(e)}")
             raise
 
     logger.info(f"Streaming processing complete: {total_entries} total entries")
@@ -226,28 +272,49 @@ def create_dataset_from_generator(
 
     try:
         for i, dataset_config in enumerate(config["datasets"]):
-            dataset_name = dataset_config["name"]
+            dataset_id = dataset_config.get("id") or dataset_config.get("name")
+            dataset_type = dataset_config.get("type", "huggingface").lower()
             subset = dataset_config.get("subset")
-            split = dataset_config["split"]
-            entries = dataset_config["entries"]
+            split = dataset_config.get("split", "train")
+            entries = dataset_config.get("entries")
 
-            dataset_key = f"{dataset_name}_{subset}_{split}"
             columns_to_drop = dataset_config.get("drop_columns")
             rename_map = dataset_config.get("rename_columns")
 
             logger.info(
-                f"Processing dataset {i + 1}/{len(config['datasets'])}: {dataset_name}"
+                f"Processing dataset {i + 1}/{len(config['datasets'])}: {dataset_id}"
             )
 
             try:
-                if subset:
-                    streaming_dataset = load_dataset(
-                        dataset_name, subset, split=split, streaming=True
-                    )
+                if dataset_type == "local":
+                    path = Path(dataset_config["path"])
+                    data_format = dataset_config.get("format", "jsonl").lower()
+                    if data_format == "jsonl":
+                        def stream_jsonl() -> Iterator[Dict[str, Any]]:
+                            with path.open("r", encoding="utf-8") as handle:
+                                for line in handle:
+                                    line = line.strip()
+                                    if line:
+                                        yield json.loads(line)
+
+                        streaming_dataset = stream_jsonl()
+                    elif data_format == "json":
+                        dataset = json.loads(path.read_text(encoding="utf-8"))
+                        if isinstance(dataset, list):
+                            streaming_dataset = iter(dataset)
+                        else:
+                            raise ValueError("JSON local dataset must be a list of records.")
+                    else:
+                        raise ValueError(f"Unsupported local format: {data_format}")
                 else:
-                    streaming_dataset = load_dataset(
-                        dataset_name, split=split, streaming=True
-                    )
+                    if subset:
+                        streaming_dataset = load_dataset(
+                            dataset_config["name"], subset, split=split, streaming=True
+                        )
+                    else:
+                        streaming_dataset = load_dataset(
+                            dataset_config["name"], split=split, streaming=True
+                        )
 
                 if entries:
                     dataset_iter = islice(streaming_dataset, entries)
@@ -263,7 +330,7 @@ def create_dataset_from_generator(
                         rename_map=rename_map,
                     )
                     example_with_source = cleaned_example.copy()
-                    example_with_source["_source_dataset"] = dataset_name
+                    example_with_source["_source_dataset"] = dataset_id
                     example_with_source["_source_subset"] = subset
                     example_with_source["_source_split"] = split
 
@@ -284,13 +351,12 @@ def create_dataset_from_generator(
                         current_chunk = []
                         chunk_idx += 1
 
-                actual_counts[dataset_key] = dataset_entries
-                logger.info(
-                    f"  Completed: {dataset_entries} entries from {dataset_name}"
-                )
+                key = make_counts_key(dataset_config)
+                actual_counts[key] = dataset_entries
+                logger.info(f"  Completed: {dataset_entries} entries from {dataset_id}")
 
             except Exception as e:
-                logger.error(f"Failed to process dataset {dataset_name}: {str(e)}")
+                logger.error(f"Failed to process dataset {dataset_id}: {str(e)}")
                 raise
 
         if current_chunk:
@@ -352,101 +418,97 @@ def create_dataset_from_generator(
 def create_dataset_memory_efficient(
     config: Dict[str, Any], output_path: str, chunk_size: int = 5000
 ) -> tuple[Dataset, Dict[str, Any]]:
-    """Create dataset using memory-efficient Arrow file streaming.
+    """Create dataset using memory-efficient Arrow file streaming."""
 
-    This approach writes data directly to Arrow format on disk,
-    avoiding loading everything into memory.
-
-    Args:
-        config: Configuration dictionary
-        output_path: Path where to save the Arrow file
-        chunk_size: Number of examples per chunk
-
-    Returns:
-        Tuple of (Dataset loaded from Arrow file, metadata dictionary)
-    """
     logger.info("Creating dataset using memory-efficient Arrow streaming...")
 
     temp_dir = tempfile.mkdtemp(prefix="arrow_chunks_")
-    parquet_files = []
-    actual_counts = {}
+    parquet_files: list[str] = []
+    actual_counts: Dict[str, int] = {}
     total_entries = 0
     chunk_idx = 0
-    current_chunk = []
+    current_chunk: list[Dict[str, Any]] = []
 
     try:
         for i, dataset_config in enumerate(config["datasets"]):
-            dataset_name = dataset_config["name"]
+            dataset_id = dataset_config.get("id") or dataset_config.get("name")
+            dataset_type = dataset_config.get("type", "huggingface").lower()
             subset = dataset_config.get("subset")
-            split = dataset_config["split"]
-            entries = dataset_config["entries"]
+            split = dataset_config.get("split", "train")
+            entries = dataset_config.get("entries")
 
-            dataset_key = f"{dataset_name}_{subset}_{split}"
             columns_to_drop = dataset_config.get("drop_columns")
             rename_map = dataset_config.get("rename_columns")
 
             logger.info(
-                f"Processing dataset {i + 1}/{len(config['datasets'])}: {dataset_name}"
+                f"Processing dataset {i + 1}/{len(config['datasets'])}: {dataset_id}"
             )
 
-            try:
+            if dataset_type == "local":
+                path_obj = Path(dataset_config["path"])
+                data_format = dataset_config.get("format", "jsonl").lower()
+                if data_format == "jsonl":
+                    def stream_jsonl() -> Iterator[Dict[str, Any]]:
+                        with path_obj.open("r", encoding="utf-8") as handle:
+                            for line in handle:
+                                line = line.strip()
+                                if line:
+                                    yield json.loads(line)
+
+                    streaming_dataset = stream_jsonl()
+                elif data_format == "json":
+                    dataset = json.loads(path_obj.read_text(encoding="utf-8"))
+                    if isinstance(dataset, list):
+                        streaming_dataset = iter(dataset)
+                    else:
+                        raise ValueError("JSON local dataset must be a list of records.")
+                else:
+                    raise ValueError(f"Unsupported local format: {data_format}")
+            else:
                 if subset:
                     streaming_dataset = load_dataset(
-                        dataset_name, subset, split=split, streaming=True
+                        dataset_config["name"], subset, split=split, streaming=True
                     )
                 else:
                     streaming_dataset = load_dataset(
-                        dataset_name, split=split, streaming=True
+                        dataset_config["name"], split=split, streaming=True
                     )
 
-                if entries:
-                    dataset_iter = islice(streaming_dataset, entries)
-                else:
-                    dataset_iter = streaming_dataset
+            dataset_iter = (
+                islice(streaming_dataset, entries) if entries else streaming_dataset
+            )
 
-                dataset_entries = 0
-
-                for example in dataset_iter:
-                    cleaned_example = clean_example(
-                        example,
-                        columns_to_drop=columns_to_drop,
-                        rename_map=rename_map,
-                    )
-                    example_with_source = cleaned_example.copy()
-                    example_with_source["_source_dataset"] = dataset_name
-                    example_with_source["_source_subset"] = subset
-                    example_with_source["_source_split"] = split
-
-                    current_chunk.append(example_with_source)
-                    dataset_entries += 1
-                    total_entries += 1
-
-                    if len(current_chunk) >= chunk_size:
-                        parquet_path = os.path.join(
-                            temp_dir, f"chunk_{chunk_idx}.parquet"
-                        )
-
-                        chunk_dataset = Dataset.from_list(current_chunk)
-                        chunk_dataset.to_parquet(parquet_path)
-                        parquet_files.append(parquet_path)
-
-                        logger.info(
-                            f"Saved parquet chunk {chunk_idx} with "
-                            f"{len(current_chunk)} examples"
-                        )
-
-                        current_chunk = []
-                        del chunk_dataset
-                        chunk_idx += 1
-
-                actual_counts[dataset_key] = dataset_entries
-                logger.info(
-                    f"  Completed: {dataset_entries} entries from {dataset_name}"
+            dataset_entries = 0
+            for example in dataset_iter:
+                cleaned_example = clean_example(
+                    example,
+                    columns_to_drop=columns_to_drop,
+                    rename_map=rename_map,
                 )
+                example_with_source = cleaned_example.copy()
+                example_with_source["_source_dataset"] = dataset_id
+                example_with_source["_source_subset"] = subset
+                example_with_source["_source_split"] = split
 
-            except Exception as e:
-                logger.error(f"Failed to process dataset {dataset_name}: {str(e)}")
-                raise
+                current_chunk.append(example_with_source)
+                dataset_entries += 1
+                total_entries += 1
+
+                if len(current_chunk) >= chunk_size:
+                    parquet_path = os.path.join(temp_dir, f"chunk_{chunk_idx}.parquet")
+                    chunk_dataset = Dataset.from_list(current_chunk)
+                    chunk_dataset.to_parquet(parquet_path)
+                    parquet_files.append(parquet_path)
+                    logger.info(
+                        f"Saved parquet chunk {chunk_idx} with {len(current_chunk)} examples"
+                    )
+                    current_chunk = []
+                    del chunk_dataset
+                    chunk_idx += 1
+
+            key = make_counts_key(dataset_config)
+            actual_counts[key] = dataset_entries
+            logger.info(f"  Completed: {dataset_entries} entries from {dataset_id}")
 
         if current_chunk:
             parquet_path = os.path.join(temp_dir, f"chunk_{chunk_idx}.parquet")
@@ -454,14 +516,12 @@ def create_dataset_memory_efficient(
             chunk_dataset.to_parquet(parquet_path)
             parquet_files.append(parquet_path)
             logger.info(
-                f"Saved final parquet chunk {chunk_idx} with "
-                f"{len(current_chunk)} examples"
+                f"Saved final parquet chunk {chunk_idx} with {len(current_chunk)} examples"
             )
             del chunk_dataset
 
         logger.info(
-            f"Processed {total_entries} total examples in "
-            f"{len(parquet_files)} parquet chunks"
+            f"Processed {total_entries} total examples in {len(parquet_files)} parquet chunks"
         )
 
         logger.info("Loading dataset from parquet chunks...")
@@ -472,13 +532,18 @@ def create_dataset_memory_efficient(
         logger.info("Shuffling complete")
 
         metadata = generate_dataset_metadata(config, actual_counts)
+        json_path = Path(output_path)
+        if json_path.suffix.lower() != ".json":
+            json_path = json_path / "dataset.json"
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Saving dataset to {json_path}...")
+        dataset.to_json(str(json_path))
+        logger.info("Dataset saved successfully.")
 
         return dataset, metadata
-
     finally:
-        logger.info("Cleaning up temporary parquet files...")
+        logger.info("Cleaning up temporary files...")
         shutil.rmtree(temp_dir, ignore_errors=True)
-
 
 def save_dataset_streaming(
     config: Dict[str, Any],

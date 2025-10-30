@@ -477,13 +477,13 @@ python scripts/generate_docs.py
 ### Code Artifacts
 - [ ] `data/data_collection.py` (adapted)
 - [ ] `data/synthetic_generation.py` (new)
-- [ ] `data/preprocess_medical.py` (new)
-- [ ] `utils/code_validator.py` (new)
-- [ ] `utils/medical_chat_templates.py` (new)
-- [ ] `utils/data_quality.py` (new)
-- [ ] `evaluation/metrics.py` (new)
-- [ ] `evaluation/evaluate_model.py` (new)
-- [ ] `evaluation/baseline.py` (new)
+- [x] `data/preprocess_medical.py` (new)
+- [x] `utils/code_validator.py` (new)
+- [x] `utils/medical_chat_templates.py` (new)
+- [x] `utils/data_quality.py` (new)
+- [x] `evaluation/metrics.py` (new)
+- [x] `evaluation/evaluate_model.py` (new)
+- [x] `evaluation/baseline.py` (new)
 - [ ] `post_training/sft.py` (exists, verify)
 - [ ] `post_training/dpo.py` (exists, verify)
 
@@ -496,34 +496,34 @@ python scripts/generate_docs.py
 - [ ] `post_training/config/thce_stage_3.yaml`
 
 ### Data Files
-- [ ] `data/code_databases/icd10_codes.json` (sample)
-- [ ] `data/code_databases/cpt_codes.json` (sample)
-- [ ] `data/code_databases/hcpcs_codes.json` (sample)
-- [ ] `data/examples/sample_stage_1.jsonl` (50 examples)
-- [ ] `data/examples/sample_stage_2.jsonl` (50 examples)
-- [ ] `data/examples/sample_stage_3.jsonl` (50 examples)
+- [x] `data/code_databases/icd10_codes.json` (sample)
+- [x] `data/code_databases/cpt_codes.json` (sample)
+- [x] `data/code_databases/hcpcs_codes.json` (sample)
+- [x] `data/examples/sample_stage_1.jsonl` (10 demo examples)
+- [x] `data/examples/sample_stage_2.jsonl` (10 demo examples)
+- [x] `data/examples/sample_stage_3.jsonl` (10 demo examples)
 
 ### Tests
-- [ ] `tests/test_code_validator.py`
-- [ ] `tests/test_data_quality.py`
-- [ ] `tests/test_preprocessing.py`
-- [ ] `tests/fixtures/` (all fixtures)
+- [x] `tests/test_code_validator.py`
+- [x] `tests/test_data_quality.py`
+- [x] `tests/test_preprocessing.py`
+- [x] `tests/fixtures/` (all fixtures)
 
 ### Documentation
-- [ ] `README.md` (updated for THCE)
-- [ ] `docs/overview.md`
-- [ ] `docs/development.md`
+- [x] `README.md` (updated for THCE)
+- [x] `docs/overview.md`
+- [x] `docs/development.md`
 - [ ] `docs/testing.md`
 - [ ] `docs/spec.md`
 - [ ] `docs/tasks.md`
-- [ ] `docs/SETUP.md`
-- [ ] `docs/DATA_PREPARATION.md`
-- [ ] `docs/TRAINING.md`
-- [ ] `docs/EVALUATION.md`
+- [x] `docs/SETUP.md`
+- [x] `docs/DATA_PREPARATION.md`
+- [x] `docs/TRAINING.md`
+- [x] `docs/EVALUATION.md`
 
 ### CI/CD
-- [ ] `.github/workflows/tests.yaml`
-- [ ] `.pre-commit-config.yaml` (update)
+- [x] `.github/workflows/uv-ci.yaml`
+- [x] `.pre-commit-config.yaml` (update)
 
 ---
 

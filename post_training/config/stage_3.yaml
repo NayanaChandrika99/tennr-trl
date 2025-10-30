@@ -1,9 +1,10 @@
-model: Shekswess/trlm-stage-2-sft-final-2
-tokenizer: Shekswess/trlm-stage-2-sft-final-2
+model: outputs/stage_2/checkpoint-5  # path to Stage 2 checkpoint once trained
+tokenizer: outputs/stage_2/checkpoint-5
 dataset:
-  name: "Shekswess/trlm-dpo-stage-3-final-2"
-  split: "train"
-  num_proc: 16
+  type: local
+  path: data/processed/stage_3.jsonl
+  format: jsonl
+  split: train
 chat_template: |
   {% for message in messages %}
     {% if loop.first and messages[0]['role'] != 'system' %}
@@ -15,34 +16,33 @@ chat_template: |
       {{ '<|im_start|>assistant\n' }}
   {% endif %}
 trainer:
-  per_device_train_batch_size: 32
-  gradient_accumulation_steps: 4
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 1
   gradient_checkpointing: true
   num_train_epochs: 1
-  learning_rate: 0.00001
-  weight_decay: 0.01
-  warmup_ratio: 0.1
+  max_steps: 5
+  learning_rate: 0.00005
+  weight_decay: 0.0
+  warmup_ratio: 0.0
   max_grad_norm: 0.2
   beta: 0.1
   loss_type: apo_zero
   save_strategy: "steps"
-  save_steps: 180
+  save_steps: 5
   logging_steps: 1
   log_level: "info"
-  report_to: "wandb"
-  run_name: "trlm-stage-3-dpo-final-2"
+  report_to: "none"
+  run_name: "thce-stage-3-dpo"
   output_dir: "outputs/stage_3_final"
-  push_to_hub: true
-  hub_model_id: "Shekswess/trlm-stage-3-dpo-final-2"
-  hub_strategy: "every_save"
-  max_prompt_length: 1048
+  push_to_hub: false
+  max_prompt_length: 512
   max_length: 2048
   lr_scheduler_type: cosine_with_min_lr
   lr_scheduler_kwargs:
     min_lr_rate: 0.1
-  dataloader_drop_last: true
-  dataloader_persistent_workers: true
-  dataloader_pin_memory: true
-  dataloader_num_workers: 12
+  dataloader_drop_last: false
+  dataloader_persistent_workers: false
+  dataloader_pin_memory: false
+  dataloader_num_workers: 0
   remove_unused_columns: false
   disable_tqdm: false

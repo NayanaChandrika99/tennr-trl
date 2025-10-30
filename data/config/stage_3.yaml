@@ -1,12 +1,15 @@
-name: Shekswess/trlm-dpo-stage-3-final
-description: Dataset dedicated for stage 3 of the post-training dedicated to preference alignment (DPO, preference alignment).
+name: thce-stage-3
+description: Stage 3 preference dataset (chosen vs rejected reasoning) for DPO alignment.
 datasets:
-  - name: scottgeng00/olmo-3-preference-mix-deltas_reasoning-yolo_scottmix-DECON-chfiltered
+  - id: thce_stage_3_primary
+    type: local
+    path: data/processed/stage_3.jsonl
+    format: jsonl
     split: train
-    entries: 50000
-    drop_columns:
-      - prompt
-      - category
-      - prompt_id
-    rename_columns:
-      dataset: source
+    entries: 40000
+  - id: thce_stage_3_validation
+    type: local
+    path: data/processed/stage_3_val.jsonl
+    format: jsonl
+    split: validation
+    entries: 2000

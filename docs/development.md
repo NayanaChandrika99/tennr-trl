@@ -36,10 +36,6 @@
 # Clone the repository
 git clone https://github.com/yourusername/tennr-trl.git
 cd tennr-trl
-
-# Check current branch
-git branch
-# Should be on: claude/verify-thce-project-plan-011CUdf2QG2HmpU1ZYMLhYif
 ```
 
 ### Step 2: Install UV Package Manager
@@ -58,8 +54,8 @@ uv --version
 ### Step 3: Create Virtual Environment
 
 ```bash
-# Create and sync environment from pyproject.toml
-uv sync
+# Create and sync environment from pyproject.toml (includes dev tools)
+uv sync --group dev
 
 # Activate virtual environment
 source .venv/bin/activate   # Linux/macOS
@@ -72,17 +68,11 @@ python --version  # Should be 3.12+
 ### Step 4: Install Dependencies
 
 ```bash
-# Install base dependencies
-uv sync
-
-# Optional: Install CPU-only PyTorch (for development without GPU)
+# Optional: install CPU-only PyTorch (development without GPU)
 uv sync --extra cpu
 
 # Optional: Install ROCm support (for AMD GPUs)
 uv sync --extra rocm
-
-# Optional: Install development tools
-uv sync --group dev
 ```
 
 ### Step 5: Configure Environment Variables
@@ -107,15 +97,9 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxx        # Anthropic API (alternative)
 ### Step 6: Verify Setup
 
 ```bash
-# Run setup validation script
-python scripts/validate_setup.py
-
-# Expected output:
-# ✓ Python version: 3.12.x
-# ✓ PyTorch installed
-# ✓ CUDA available: True/False
-# ✓ All dependencies installed
-# ✓ Environment variables configured
+# Run automated checks
+uv run --group dev pytest
+uvx pre-commit run --all-files
 ```
 
 ---
