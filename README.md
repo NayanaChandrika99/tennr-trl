@@ -3,7 +3,7 @@
 # THCE – Tiny Reasoning Model for Medical Coding
 
 THCE is a turnkey repository for building a 135M parameter SmolLM2 model that converts free-form clinical narratives into ICD-10, CPT, and HCPCS billing codes while exposing its reasoning with `<think>` tags.  
-Phase 1 (this repo) focuses on engineering deliverables: datasets, validation tooling, configuration, documentation, and tests. Training is deferred to Phase 2 when compute budget is available.
+
 
 ---
 
@@ -162,28 +162,6 @@ Schemas and expectations are documented in `docs/DATA_PREPARATION.md`.
 └── uv.lock
 ```
 
----
-
-## Environmental Configuration
-
-```bash
-# .env.example
-HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxx
-WANDB_API_KEY=xxxxxxxxxxxxxxxxxxx
-WANDB_PROJECT=thce-training
-WANDB_ENTITY=your-org
-OPENAI_API_KEY=sk-your-key           # optional, synthetic generation
-ANTHROPIC_API_KEY=sk-ant-your-key    # optional alternative provider
-```
-
----
-
-## Phase 1 Deliverables
-
-- ✅ Data scaffolding, preprocessing pipeline, and validator tooling
-- ✅ Stage-specific configuration and documentation
-- ✅ Automated tests and CI-ready workflow
-- ✅ Training entry points configured for future GPU runs
 
 ---
 
