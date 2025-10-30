@@ -134,18 +134,6 @@ Schemas and expectations are documented in `docs/DATA_PREPARATION.md`.
 │   ├── data_collection.py
 │   ├── preprocess_medical.py
 │   └── synthetic_generation.py
-├── docs
-│   ├── DATA_PREPARATION.md
-│   ├── DEVELOPMENT.md
-│   ├── EVALUATION.md
-│   ├── OVERVIEW.md
-│   ├── REVISED_PLAN.md
-│   ├── SETUP.md
-│   ├── SPIKES.md
-│   ├── SPEC.md
-│   ├── TASKS.md
-│   ├── TESTING.md
-│   └── TRAINING.md
 ├── evaluation
 │   ├── analysis.py
 │   ├── baseline.py
@@ -196,8 +184,6 @@ ANTHROPIC_API_KEY=sk-ant-your-key    # optional alternative provider
 - ✅ Stage-specific configuration and documentation
 - ✅ Automated tests and CI-ready workflow
 - ✅ Training entry points configured for future GPU runs
-
-Review `docs/REVISED_PLAN.md` for the complete engineering roadmap and Phase 2 prerequisites.
 
 ---
 
